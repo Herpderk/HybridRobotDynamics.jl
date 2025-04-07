@@ -1,0 +1,7 @@
+name = "HybridRobotDynamics"
+uuid = "7b132197-0f72-4153-9f31-a6b714d67d31"
+authors = ["Derek Fan <derekfan.18.2002@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+RigidBodyDynamics = "366cf18f-59d5-5db9-a4de-86a9f6786172"
