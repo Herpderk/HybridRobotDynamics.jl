@@ -1,5 +1,6 @@
 module HybridRobotDynamics
 
+using LinearAlgebra
 using ForwardDiff
 using RigidBodyDynamics
 using Plots
