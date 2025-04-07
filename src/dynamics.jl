@@ -60,7 +60,7 @@ mutable struct HybridMode
     transitions::Dict{Transition, HybridMode}
     function HybridMode(
         flow::Function,
-        transitions::Dict{Transition, HybridMode} = Dict()
+        transitions::Dict{Transition, HybridMode} = Dict{Transition, HybridMode}(Dict())
     )::HybridMode
         return new(flow, transitions)
     end
@@ -117,12 +117,12 @@ mutable struct HybridSystem
     stage_nh::Int
     term_ng::Int
     term_nh::Int
-    transitions::Dict{Symbol, Transition}
-    modes::Dict{Symbol, HybridMode}
     stage_ineq_constr::Union{Nothing, Function}
     stage_eq_constr::Union{Nothing, Function}
     term_ineq_constr::Union{Nothing, Function}
     term_eq_constr::Union{Nothing, Function}
+    transitions::Dict{Symbol, Transition}
+    modes::Dict{Symbol, HybridMode}
     function HybridSystem(
         nx::Int,
         nu::Int,
@@ -148,10 +148,10 @@ mutable struct HybridSystem
             isnothing(constr) ? 0 : length(constr(xtest))
             for constr in term_constrs
         ]
-
         return new(
-            nx, nu, transitions, modes,
-            stage_dims..., term_dims..., stage_constrs..., term_constrs...,
+            nx, nu, stage_dims..., term_dims...,
+            stage_constrs..., term_constrs...,
+            transitions, modes,
         )
     end
 end
