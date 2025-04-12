@@ -18,7 +18,7 @@ export
 include("utils.jl")
 include("integrators.jl")
 include("lagrangian.jl")
-include("dynamics.jl")
+include("hybrid.jl")
 include("models.jl")
 include("plotting.jl")
 
