@@ -20,8 +20,8 @@ function (saltation::SaltationMatrix)(
     u::Vector{<:DiffFloat}
 )::Matrix{<:DiffFloat}
     xJ = saltation.reset(x)
-    g_grad = FD.gradient(saltation.guard, x)
-    R_jac = FD.jacobian(saltation.reset, x)
+    g_grad = ForwardDiff.gradient(saltation.guard, x)
+    R_jac = ForwardDiff.jacobian(saltation.reset, x)
     return (
         R_jac + (saltation.flow_J(xJ, u) - R_jac * saltation.flow_I(x, u))
               * g_grad' / (g_grad' * saltation.flow_I(x,u))
