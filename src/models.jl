@@ -16,31 +16,78 @@ function bouncing_ball(
         u::Vector{<:DiffFloat}
     ) -> [x[3:4]; 0.0; u[1] - g]
 
-    # Define hybrid modes
-    up_mode = HybridMode(flight_flow)
-    down_mode = HybridMode(flight_flow)
-
-    # Define apex transition
-    g_apex = x::Vector{<:DiffFloat} -> x[4]
-    R_apex = x::Vector{<:DiffFloat} -> x
-    apex = Transition(flight_flow, flight_flow, g_apex, R_apex)
-    add_transition!(up_mode, down_mode, apex)
+    # Define hybrid mode
+    flight_mode = HybridMode(flight_flow)
 
     # Define impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[2]
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; -e * x[4]]
+    g_impact = x::Vector{<:DiffFloat} -> x[2]::DiffFloat
+    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; -e*x[4]]::Vector{<:DiffFloat}
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
-    add_transition!(down_mode, up_mode, impact)
+    add_transition!(flight_mode, flight_mode, impact)
 
     # Create hybrid system dicts
-    transitions = Dict(
-        :apex => apex,
-        :impact => impact
-    )
-    modes = Dict(
-        :upwards => up_mode,
-        :downwards => down_mode
-    )
+    transitions = Dict(:impact => impact)
+    modes = Dict(:flight => flight_mode)
+    return HybridSystem(nx, nu, transitions, modes)
+end
+
+"""
+"""
+function bouncing_quadrotor(
+    e::Float64,
+    gravity::Float64,
+    mass::Float64,
+    principal_moments::Vector{Float64},
+    torque_consts::Vector{Float64},
+    rotor_xs::Vector{Float64},
+    rotor_ys::Vector{Float64}
+)::HybridSystem
+    @assert size(principal_moments) == (3,)
+    @assert size(torque_consts) == (4,)
+    @assert size(rotor_xs) == (4,)
+    @assert size(rotor_ys) == (4,)
+
+    # Constants
+    g = [0.0, 0.0, -gravity]
+    J = diagm(principal_moments)
+    K = [zeros(2,4); ones(1,4)]
+    B = [
+        rotor_ys';
+        -rotor_xs';
+        (torque_consts .* [-1.0, 1.0, -1.0, 1.0])'
+    ]
+
+    # Smooth dynamics
+    function quadrotor_flow(
+        x::Vector{<:DiffFloat},
+        u::Vector{<:DiffFloat}
+    )::Vector{<:DiffFloat}
+        q = x[4:7]
+        v = x[8:10]
+        ω = x[11:13]
+        return [
+            Qquat(q) * v;
+            0.5 * Gquat(q) * ω;
+            Qquat(q)'*g + K*u/mass - cross(ω, v);
+            J \ (B*u - cross(ω, J*ω))
+        ]
+    end
+
+    # Hybrid modes
+    flight_mode = HybridMode(quadrotor_flow)
+
+    # Impact transition
+    g_impact = x::Vector{<:DiffFloat} -> x[3]::DiffFloat
+    R_impact = x::Vector{<:DiffFloat} -> [
+        x[1:2]; 1e-3; x[4:9]; -e*x[10]; x[11:13]]::Vector{<:DiffFloat}
+    impact = Transition(quadrotor_flow, quadrotor_flow, g_impact, R_impact)
+    add_transition!(flight_mode, flight_mode, impact)
+
+    # Create hybrid system
+    nx = 13
+    nu = 4
+    transitions = Dict(:impact => impact)
+    modes = Dict(:flight => flight_mode)
     return HybridSystem(nx, nu, transitions, modes)
 end
 

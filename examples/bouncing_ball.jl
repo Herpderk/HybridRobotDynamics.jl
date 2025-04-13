@@ -2,7 +2,7 @@ using Pkg; Pkg.activate(joinpath(@__DIR__, ".."))
 using LinearAlgebra
 using HybridRobotDynamics
 
-# Define elast bouncing ball model
+# Define elastic bouncing ball model
 system = bouncing_ball()
 
 # Define roll-out parameters
@@ -12,7 +12,7 @@ N = 50
 # Define control inputs and initial conditions
 us = zeros(N * system.nu)
 xic = [0.0; 5.0; 1.0; 0.0]
-init_mode = :downwards
+init_mode = :flight
 
 # Roll out and visualize
 rk4 = ExplicitIntegrator(:rk4)
