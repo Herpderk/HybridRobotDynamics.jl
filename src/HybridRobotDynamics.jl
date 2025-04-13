@@ -13,12 +13,14 @@ export
         roll_out,
         plot_2d_states,
         bouncing_ball,
+        bouncing_quadrotor,
         hopper
 
 include("utils.jl")
 include("integrators.jl")
 include("lagrangian.jl")
 include("hybrid.jl")
+include("quat.jl")
 include("models.jl")
 include("plotting.jl")
 
