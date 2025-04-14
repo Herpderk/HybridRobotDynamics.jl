@@ -27,13 +27,14 @@ Callable struct that instantiates its integration method based on the correspond
 """
 struct ExplicitIntegrator
     method::Function
-    function ExplicitIntegrator(
-        method_name::Symbol
-    )::ExplicitIntegrator
-        return new(get_module_function(Explicit, method_name))
-    end
 end
 
+function ExplicitIntegrator(
+    method_name::Symbol
+)::ExplicitIntegrator
+    method = get_module_function(Explicit, method_name)
+    return ExplicitIntegrator(method)
+end
 
 """
     integrator(dynamics, primals)

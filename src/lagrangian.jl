@@ -25,6 +25,7 @@ function BlockIndices(
     return BlockIndices(nq, nJ)
 end
 
+
 """
 """
 struct LagrangianDynamics
@@ -48,6 +49,7 @@ function LagrangianDynamics(
     idx = BlockIndices(nq, J)
     return LagrangianDynamics(nq, idx, M, c, J, J̇, B)
 end
+
 
 """
 """

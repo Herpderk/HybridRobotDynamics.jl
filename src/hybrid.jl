@@ -156,7 +156,6 @@ mutable struct HybridSystem
     end
 end
 
-
 """
     roll_out(system, integrator, N, Δt, us, x0, init_transition)
 
