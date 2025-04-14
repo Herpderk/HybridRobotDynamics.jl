@@ -4,6 +4,7 @@
 Returns the hybrid system model containing the modes and transitions of a planar (in)elastic bouncing ball.
 """
 function bouncing_ball(
+    m::Real = 1.0,
     e::Real = 1.0,
     g::Real = 9.81
 )::HybridSystem
@@ -11,10 +12,16 @@ function bouncing_ball(
     # State space: x, y, xdot, ydot
     nx = 4
     nu = 1
-    flight_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> [x[3:4]; 0.0; u[1] - g]
+    nq = 2
+
+    # Smooth dynamics
+    actuated = x::Vector{<:DiffFloat} -> (
+        reshape([zeros(3); 1.0], 4, 1)::Matrix{<:DiffFloat}
+    )
+    unactuated = x::Vector{<:DiffFloat} -> (
+        [x[3:4]; 0.0; -g]::Vector{<:DiffFloat}
+    )
+    flight_flow = ControlAffineFlow(actuated, unactuated)
 
     # Define hybrid mode
     flight_mode = HybridMode(flight_flow)
@@ -58,29 +65,31 @@ function bouncing_quadrotor(
     ]
 
     # Smooth dynamics
-    function quadrotor_flow(
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
+    function actuated(x::Vector{<:DiffFloat})::Matrix{<:DiffFloat}
+        return [zeros(7,4); mass\K; J\B]
+    end
+    function unactuated(x::Vector{<:DiffFloat})::Vector{<:DiffFloat}
         q = x[4:7]
         v = x[8:10]
         ω = x[11:13]
         return [
             Qquat(q) * v;
             0.5 * Gquat(q) * ω;
-            Qquat(q)'*g + K*u/mass - cross(ω, v);
-            J \ (B*u - cross(ω, J*ω))
+            Qquat(q)'*g - cross(ω, v);
+            -J \ cross(ω, J*ω)
         ]
     end
+    flight_flow = ControlAffineFlow(actuated, unactuated)
 
     # Hybrid modes
-    flight_mode = HybridMode(quadrotor_flow)
+    flight_mode = HybridMode(flight_flow)
 
     # Impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[3]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> [
-        x[1:2]; 1e-3; x[4:9]; -e*x[10]; x[11:13]]::Vector{<:DiffFloat}
-    impact = Transition(quadrotor_flow, quadrotor_flow, g_impact, R_impact)
+    R_impact = x::Vector{<:DiffFloat} -> (
+        [x[1:2]; 1e-3; x[4:9]; -e*x[10]; x[11:13]]::Vector{<:DiffFloat}
+    )
+    impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(flight_mode, flight_mode, impact)
 
     # Create hybrid system
@@ -135,30 +144,26 @@ function hopper(
         return [L1  L2; L2 -L1; zeros(2,2)]
     end
 
-    function flow(
-        control_allocation::Function,
-        gravity::Vector{<:Real},
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
-        B = control_allocation(x)
-        return [x[5:8]; gravity + M\(B*u)]
-    end
-
     # Define flight mode
     grav_flight = [0; -g; 0; -g]
-    flight_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> flow(B_flight, grav_flight, x, u)
+    flight_unactuated = x::Vector{<:DiffFloat} -> (
+        [x[5:8]; grav_flight]::Vector{<:DiffFloat}
+    )
+    flight_actuated = x::Vector{<:DiffFloat} -> (
+        (M \ B_flight(x))::Vector{<:DiffFloat}
+    )
+    flight_flow = ControlAffineFlow(flight_actuated, flight_unactuated)
     flight_mode = HybridMode(flight_flow)
 
     # Define stance mode
     grav_stance =  [0; -g; 0; 0]
-    stance_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> flow(B_stance, grav_stance, x, u)
+    stance_unactuated = x::Vector{<:DiffFloat} -> (
+        [x[5:8]; grav_stance]::Vector{<:DiffFloat}
+    )
+    stance_actuated = x::Vector{<:DiffFloat} -> (
+        (M \ B_stance(x))::Vector{<:DiffFloat}
+    )
+    stance_flow = ControlAffineFlow(stance_actuated, stance_unactuated)
     stance_mode = HybridMode(stance_flow)
 
     # Define impact transition
