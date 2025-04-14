@@ -2,6 +2,8 @@ module HybridRobotDynamics
 
 using LinearAlgebra
 using ForwardDiff
+using ModelingToolkit
+using Symbolics
 using Plots
 
 export
@@ -14,6 +16,7 @@ export
         plot_2d_states,
         bouncing_ball,
         bouncing_quadrotor,
+        five_link_walker,
         hopper
 
 include("utils.jl")
