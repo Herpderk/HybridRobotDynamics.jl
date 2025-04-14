@@ -17,8 +17,8 @@ export
         hopper
 
 include("utils.jl")
+include("dynamics.jl")
 include("integrators.jl")
-include("lagrangian.jl")
 include("hybrid.jl")
 include("quat.jl")
 include("models.jl")
