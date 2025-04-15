@@ -35,7 +35,7 @@ function bouncing_ball(
 
     # Define impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[2]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; -e*x[4]]::Vector{<:DiffFloat}
+    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; abs(e*x[4])]::Vector{<:DiffFloat}
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(down_mode, up_mode, impact)
 
@@ -101,7 +101,7 @@ function bouncing_quadrotor(
     # Impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[3]::DiffFloat
     R_impact = x::Vector{<:DiffFloat} -> (
-        [x[1:9]; -e*x[10]; x[11:13]]::Vector{<:DiffFloat}
+        [x[1:9]; abs(e*x[10]); x[11:13]]::Vector{<:DiffFloat}
     )
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(down_mode, up_mode, impact)
@@ -119,7 +119,6 @@ end
 function hopper(
     m1::Real = 5.0,    # body mass
     m2::Real = 1.0,    # foot mass
-    e::Real = 0.0,     # coefficient of restitution of foot
     g::Real = 9.81,    # acceleration due to gravity
     Llb::Real = 0.5,
     Lub::Real = 1.5
@@ -182,7 +181,7 @@ function hopper(
 
     # Define impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[4]
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:6]; e * x[7:8]]
+    R_impact = x::Vector{<:DiffFloat} -> [x[1:6]; zeros(2)]
     impact = Transition(flight_flow, stance_flow, g_impact, R_impact)
     add_transition!(flight_mode, stance_mode, impact)
 
