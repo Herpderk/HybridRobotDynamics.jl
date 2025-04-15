@@ -25,30 +25,21 @@ function bouncing_ball(
     # Or like this:
     #   flow = ControlAffineFlow(manip_args...)
 
-    # Hybrid modes
+    # Flow and hybrid mode
     qidx = 1:2
     q̇idx = 3:4
     flight_flow = ControlAffineFlow(qidx, q̇idx, B, M, c)
-    up_mode = HybridMode(flight_flow)
-    down_mode = HybridMode(flight_flow)
+    flight_mode = HybridMode(flight_flow)
 
-    # Apex transition
-    g_apex = x -> x[4]::DiffFloat
-    R_apex = x -> x::Vector{<:DiffFloat}
-    apex = Transition(flight_flow, flight_flow, g_apex, R_apex)
-    add_transition!(up_mode, down_mode, apex)
-
-    # Define impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[2]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> (
-        [x[1]; 1e-9; x[3]; abs(e*x[4])]::Vector{<:DiffFloat}
-    )
+    # Impact transition
+    g_impact = x -> x[2]::DiffFloat
+    R_impact = x -> [x[1]; 1e-9; x[3]; abs(e*x[4])]::Vector{<:DiffFloat}
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
-    add_transition!(down_mode, up_mode, impact)
+    add_transition!(flight_mode, flight_mode, impact)
 
-    # Create hybrid system dicts
-    transitions = Dict(:apex => apex, :impact => impact)
-    modes = Dict(:up => up_mode, :down => down_mode)
+    # Hybrid system dicts
+    transitions = Dict(:impact => impact)
+    modes = Dict(:flight => flight_mode)
     return HybridSystem(nx, nu, transitions, modes)
 end
 
@@ -93,31 +84,24 @@ function bouncing_quadrotor(
             -J \ cross(ω, J*ω)
         ]
     end
+
+    # Hybrid mode
     flight_flow = ControlAffineFlow(actuated, unactuated)
-
-    # Hybrid modes
-    up_mode = HybridMode(flight_flow)
-    down_mode = HybridMode(flight_flow)
-
-    # Apex transition
-    g_apex = x::Vector{<:DiffFloat} -> x[10]::DiffFloat
-    R_apex = x::Vector{<:DiffFloat} -> x::Vector{<:DiffFloat}
-    apex = Transition(flight_flow, flight_flow, g_apex, R_apex)
-    add_transition!(up_mode, down_mode, apex)
+    flight_mode = HybridMode(flight_flow)
 
     # Impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[3]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> (
-        [x[1:9]; abs(e*x[10]); x[11:13]]::Vector{<:DiffFloat}
+    g_impact = x -> x[3]::DiffFloat
+    R_impact = x -> (
+        [x[1:2]; 1e-9; x[4:9]; abs(e*x[10]); x[11:13]]::Vector{<:DiffFloat}
     )
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
-    add_transition!(down_mode, up_mode, impact)
+    add_transition!(flight_mode, flight_mode, impact)
 
     # Create hybrid system
     nx = 13
     nu = 4
-    transitions = Dict(:apex => apex, :impact => impact)
-    modes = Dict(:up => up_mode, :down => down_mode)
+    transitions = Dict(:impact => impact)
+    modes = Dict(:flight => flight_mode)
     return HybridSystem(nx, nu, transitions, modes)
 end
 
@@ -188,7 +172,7 @@ function hopper(
 
     # Define impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[4]
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:6]; zeros(2)]
+    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; 1e-9; x[5:6]; zeros(2)]
     impact = Transition(flight_flow, stance_flow, g_impact, R_impact)
     add_transition!(flight_mode, stance_mode, impact)
 

@@ -11,7 +11,7 @@ N = 50
 # Define control inputs and initial conditions
 us = zeros(N * system.nu)
 xic = [0.0; 5.0; 1.0; 0.0]
-init_mode = :down
+init_mode = :flight
 
 # Roll out and visualize
 rk4 = ExplicitIntegrator(:rk4)
