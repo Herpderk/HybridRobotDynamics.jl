@@ -14,28 +14,29 @@ function bouncing_ball(
     nu = 1
     nq = 2
 
-    # Smooth dynamics
-    actuated = x::Vector{<:DiffFloat} -> (
-        reshape([zeros(3); 1.0], 4, 1)::Matrix{<:DiffFloat}
-    )
-    unactuated = x::Vector{<:DiffFloat} -> (
-        [x[3:4]; 0.0; -g]::Vector{<:DiffFloat}
-    )
-    flight_flow = ControlAffineFlow(actuated, unactuated)
+    # Manipulator equation form
+    B = (q, q̇) -> reshape([0.0, 1.0], 2, 1)::Matrix{<:DiffFloat}
+    M = q -> Matrix{Float64}(m * I(2))::Matrix{<:DiffFloat}
+    c = (q, q̇) -> m * [0.0, g]::Vector{<:DiffFloat}
 
-    # Define hybrid modes
+    # Smooth dynamics and modes
+    qidx = 1:2
+    q̇idx = 3:4
+    flight_flow = ControlAffineFlow(qidx, q̇idx, B, M, c)
     up_mode = HybridMode(flight_flow)
     down_mode = HybridMode(flight_flow)
 
     # Apex transition
-    g_apex = x::Vector{<:DiffFloat} -> x[4]::DiffFloat
-    R_apex = x::Vector{<:DiffFloat} -> x::Vector{<:DiffFloat}
+    g_apex = x -> x[4]::DiffFloat
+    R_apex = x -> x::Vector{<:DiffFloat}
     apex = Transition(flight_flow, flight_flow, g_apex, R_apex)
     add_transition!(up_mode, down_mode, apex)
 
     # Define impact transition
     g_impact = x::Vector{<:DiffFloat} -> x[2]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; abs(e*x[4])]::Vector{<:DiffFloat}
+    R_impact = x::Vector{<:DiffFloat} -> (
+        [x[1]; 1e-9; x[3]; abs(e*x[4])]::Vector{<:DiffFloat}
+    )
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(down_mode, up_mode, impact)
 

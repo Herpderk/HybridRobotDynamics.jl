@@ -23,7 +23,7 @@ function BlockIndices(
     J::Function
 )::BlockIndices
     qtest = zeros(nq)
-    nJ = size(J(qtest, qtest))
+    nJ = size(J(qtest))
     return BlockIndices(nq, nJ)
 end
 
@@ -51,18 +51,32 @@ function ManipulatorEquation(
     J::Function,
     J̇::Function
 )::ManipulatorEquation
-    # Assert position and velocity state dimensions
+    # Assert position and velocity sizes
     nq = length(qidx)
     nq̇ = length(q̇idx)
     @assert nq == nq̇
 
-    # Assert function output types
+    # Get sample function outputs
     qtest = zeros(nq)
-    @assert typeof(B(qtest, qtest)) <: Matrix
-    @assert typeof(M(qtest)) <: Matrix
-    @assert typeof(c(qtest, qtest)) <: Vector
-    @assert typeof(J(qtest)) <: Matrix
-    @assert typeof(J̇(qtest, qtest)) <: Matrix
+    Btest = B(qtest, qtest)
+    Mtest = M(qtest)
+    ctest = c(qtest, qtest)
+    Jtest = J(qtest)
+    J̇test = J̇(qtest, qtest)
+
+    # Assert function output sizes
+    @assert size(Btest)[1] == nq
+    @assert size(Mtest) == (nq, nq)
+    @assert size(ctest) == (nq,)
+    @assert size(Jtest)[2] == size(J̇test)[2] == nq
+    @assert size(Jtest) == size(J̇test)
+
+    # Assert function output types
+    @assert typeof(Btest) <: Matrix{<:DiffFloat}
+    @assert typeof(Mtest) <: Matrix{<:DiffFloat}
+    @assert typeof(ctest) <: Vector{<:DiffFloat}
+    @assert typeof(Jtest) <: Matrix{<:DiffFloat}
+    @assert typeof(J̇test) <: Matrix{<:DiffFloat}
 
     blockidx = BlockIndices(nq, J)
     return ManipulatorEquation(nq, qidx, q̇idx, blockidx, B, M, c, J, J̇)
@@ -80,7 +94,7 @@ function ManipulatorEquation(
     J̇ = (q::Vector{<:DiffFloat}, q̇::Vector{<:DiffFloat}) -> (
         zeros(0, nq)::Matrix{<:DiffFloat}
     )
-    return ManipulatorEquation(qidx, q̇idx, blockidx, B, M, c, J, J̇)
+    return ManipulatorEquation(qidx, q̇idx, B, M, c, J, J̇)
 end
 
 
@@ -145,7 +159,8 @@ function actuation_mapping(
     x::Vector{<:DiffFloat}
 )::Matrix{<:DiffFloat}
     q = x[manip.qidx]
-    return Minv * manip.B(q)
+    q̇ = x[manip.q̇idx]
+    return Minv * manip.B(q, q̇)
 end
 
 """
@@ -191,7 +206,7 @@ function ControlAffineFlow(
     manip::ManipulatorEquation
 )::ControlAffineFlow
     qtest = zeros(manip.nq)
-    nu = size(manip.B(qtest))[2]
+    nu = size(manip.B(qtest, qtest))[2]
 
     actuated = x::Vector{<:DiffFloat} -> (
         [zeros(manip.nq, nu); actuation_mapping(manip, x)]
@@ -221,7 +236,7 @@ function (flow::ControlAffineFlow)(
 )::Vector{<:DiffFloat}
     if typeof(flow.manip) === ManipulatorEquation
         q̇ = x[flow.manip.q̇idx]
-        q̈ = acceleration(manip, x, u)
+        q̈ = acceleration(flow.manip, x, u)
         return [q̇; q̈]
     else
         return flow.unactuated(x) + flow.actuated(x)*u
