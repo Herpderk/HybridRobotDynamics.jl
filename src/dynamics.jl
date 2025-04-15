@@ -1,6 +1,7 @@
 """
 """
 struct BlockIndices
+    nΛ::Int
     M::Tuple{UnitRange{Int}, UnitRange{Int}}
     J::Tuple{UnitRange{Int}, UnitRange{Int}}
     Λ::Tuple{UnitRange{Int}, UnitRange{Int}}
@@ -13,7 +14,8 @@ function BlockIndices(
     Midx = (1:nq, 1:nq)
     Jidx = (nq .+ (1:nJ[1]), 1:nJ[2])
     Λidx = (nq .+ (1:nJ[1]), nq .+ (1:nJ[1]))
-    return BlockIndices(Midx, Jidx, Λidx)
+    nΛ = nJ[1]
+    return BlockIndices(nΛ, Midx, Jidx, Λidx)
 end
 
 function BlockIndices(
@@ -49,9 +51,19 @@ function ManipulatorEquation(
     J::Function,
     J̇::Function
 )::ManipulatorEquation
+    # Assert position and velocity state dimensions
     nq = length(qidx)
     nq̇ = length(q̇idx)
     @assert nq == nq̇
+
+    # Assert function output types
+    qtest = zeros(nq)
+    @assert typeof(B(qtest, qtest)) <: Matrix
+    @assert typeof(M(qtest)) <: Matrix
+    @assert typeof(c(qtest, qtest)) <: Vector
+    @assert typeof(J(qtest)) <: Matrix
+    @assert typeof(J̇(qtest, qtest)) <: Matrix
+
     blockidx = BlockIndices(nq, J)
     return ManipulatorEquation(nq, qidx, q̇idx, blockidx, B, M, c, J, J̇)
 end
@@ -64,9 +76,9 @@ function ManipulatorEquation(
     c::Function
 )::ManipulatorEquation
     nq = length(qidx)
-    J = q::Vector{<:DiffFloat} -> zeros(0, nq)::Vector{<:DiffFloat}
+    J = q::Vector{<:DiffFloat} -> zeros(0, nq)::Matrix{<:DiffFloat}
     J̇ = (q::Vector{<:DiffFloat}, q̇::Vector{<:DiffFloat}) -> (
-        zeros(0, nq)::Vector{<:DiffFloat}
+        zeros(0, nq)::Matrix{<:DiffFloat}
     )
     return ManipulatorEquation(qidx, q̇idx, blockidx, B, M, c, J, J̇)
 end
@@ -81,8 +93,8 @@ function manipulator_block(
     q = x[manip.qidx]
     M = manip.M(q)
     J = manip.J(q)
-    nΛ = size(J)[1]
-    return [M J'; J zeros(nΛ, nΛ)]
+    Λ = zeros(manip.blockidx.nΛ, manip.blockidx.nΛ)
+    return [M J'; J Λ]
 end
 
 """
@@ -92,7 +104,7 @@ function manipulator_inverses(
     x::Vector{<:DiffFloat}
 )::Tuple{Matrix{<:DiffFloat}, Matrix{<:DiffFloat}, Matrix{<:DiffFloat}}
     block = manipulator_block(manip, x)
-    blockinv = block / I
+    blockinv = block \ I
     Minv = blockinv[manip.blockidx.M...]
     Jinv = blockinv[manip.blockidx.J...]
     Λinv = blockinv[manip.blockidx.Λ...]
@@ -115,6 +127,8 @@ function unactuated_acceleration(
     return q̈u
 end
 
+"""
+"""
 function unactuated_acceleration(
     manip::ManipulatorEquation,
     x::Vector{<:DiffFloat}
@@ -188,6 +202,14 @@ function ControlAffineFlow(
     )::Vector{<:DiffFloat}
 
     return ControlAffineFlow(manip, actuated, unactuated)
+end
+
+function ControlAffineFlow(
+    qidx::UnitRange{Int},
+    q̇idx::UnitRange{Int},
+    manipfuncs::Vararg{Function}
+)::ControlAffineFlow
+    return ControlAffineFlow(ManipulatorEquation(qidx, q̇idx, manipfuncs...))
 end
 
 
