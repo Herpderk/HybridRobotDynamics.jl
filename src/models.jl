@@ -19,7 +19,13 @@ function bouncing_ball(
     M = q -> Matrix{Float64}(m * I(2))::Matrix{<:DiffFloat}
     c = (q, q̇) -> m * [0.0, g]::Vector{<:DiffFloat}
 
-    # Smooth dynamics and modes
+    # We can define a ControlAffineFlow like this:
+    #   manip = ManipulatorEquation(manip_args...)
+    #   flow = ControlAffineFlow(manip)
+    # Or like this:
+    #   flow = ControlAffineFlow(manip_args...)
+
+    # Hybrid modes
     qidx = 1:2
     q̇idx = 3:4
     flight_flow = ControlAffineFlow(qidx, q̇idx, B, M, c)
