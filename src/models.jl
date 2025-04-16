@@ -12,7 +12,8 @@ function bouncing_ball(
     # State space: x, y, xdot, ydot
     nx = 4
     nu = 1
-    nq = 2
+    qidx = 1:2
+    q̇idx = 3:4
 
     # Manipulator equation form
     B = (q, q̇) -> reshape([0.0, 1.0], 2, 1)::Matrix{<:DiffFloat}
@@ -26,8 +27,6 @@ function bouncing_ball(
     #   flow = ControlAffineFlow(manip_args...)
 
     # Flow and hybrid mode
-    qidx = 1:2
-    q̇idx = 3:4
     flight_flow = ControlAffineFlow(qidx, q̇idx, B, M, c)
     flight_mode = HybridMode(flight_flow)
 
