@@ -176,23 +176,21 @@ function roll_out(
     u_idx = [(1:system.nu) .+ (k-1)*system.nu for k = 1:N-1]
     xs = [zeros(system.nx) for k = 1:N]
     xs[1] = x0
-    mode_I = system.modes[init_mode]
+    mI = system.modes[init_mode]
 
     # Roll out over time horizon
     for k = 1:N-1
-        xk = xs[k]
+        # Integrate smooth dynamics
+        xs[k+1] = integrator(mI.flow, xs[k], us[u_idx[k]], Δt)
 
         # Reset and update mode if guard is hit
-        for (trans, mode_J) in mode_I.transitions
-            if trans.guard(xk) <= 0.0
-                xk = trans.reset(xk)
-                mode_I = mode_J
+        for (trans, mJ) in mI.transitions
+            if trans.guard(xs[k+1]) <= 0.0
+                xs[k+1] = trans.reset(xs[k+1])
+                mI = mJ
                 break
             end
         end
-
-        # Integrate smooth dynamics
-        xs[k+1] = integrator(mode_I.flow, xk, us[u_idx[k]], Δt)
     end
     return vcat(xs...)
 end

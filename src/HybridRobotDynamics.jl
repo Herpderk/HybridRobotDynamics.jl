@@ -5,9 +5,14 @@ using ForwardDiff
 using Plots
 
 export
-        add_transition!,
+        ManipulatorEquation,
+        manipulator_inverses,
+        unactuated_acceleration,
+        actuation_mapping,
+        ControlAffineFlow,
         Transition,
         HybridMode,
+        add_transition!,
         HybridSystem,
         ExplicitIntegrator,
         roll_out,
