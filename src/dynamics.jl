@@ -90,10 +90,8 @@ function ManipulatorEquation(
     c::Function
 )::ManipulatorEquation
     nq = length(qidx)
-    J = q::Vector{<:DiffFloat} -> zeros(0, nq)::Matrix{<:DiffFloat}
-    J̇ = (q::Vector{<:DiffFloat}, q̇::Vector{<:DiffFloat}) -> (
-        zeros(0, nq)::Matrix{<:DiffFloat}
-    )
+    J = q -> zeros(0, nq)::Matrix{<:DiffFloat}
+    J̇ = (q, q̇) -> zeros(0, nq)::Matrix{<:DiffFloat}
     return ManipulatorEquation(qidx, q̇idx, B, M, c, J, J̇)
 end
 
