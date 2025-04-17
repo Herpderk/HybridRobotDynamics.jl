@@ -35,7 +35,7 @@ struct ManipulatorEquation
     qidx::UnitRange{Int}
     q̇idx::UnitRange{Int}
     blockidx::BlockIndices
-    B::Function     # B(q, q̇)
+    B::Function     # B(q)
     M::Function     # M(q)
     c::Function     # c(q, q̇)
     J::Function     # J(q)
@@ -58,7 +58,7 @@ function ManipulatorEquation(
 
     # Get sample function outputs
     qtest = zeros(nq)
-    Btest = B(qtest, qtest)
+    Btest = B(qtest)
     Mtest = M(qtest)
     ctest = c(qtest, qtest)
     Jtest = J(qtest)
@@ -160,7 +160,7 @@ function actuation_mapping(
 )::Matrix{<:DiffFloat}
     q = x[manip.qidx]
     q̇ = x[manip.q̇idx]
-    return Minv * manip.B(q, q̇)
+    return Minv * manip.B(q)
 end
 
 """
@@ -206,15 +206,15 @@ function ControlAffineFlow(
     manip::ManipulatorEquation
 )::ControlAffineFlow
     qtest = zeros(manip.nq)
-    nu = size(manip.B(qtest, qtest))[2]
+    nu = size(manip.B(qtest))[2]
 
-    actuated = x::Vector{<:DiffFloat} -> (
-        [zeros(manip.nq, nu); actuation_mapping(manip, x)]
-    )::Matrix{<:DiffFloat}
+    actuated = x -> (
+        [zeros(manip.nq, nu); actuation_mapping(manip, x)]::Matrix{<:DiffFloat}
+    )
 
-    unactuated = x::Vector{<:DiffFloat} -> (
-        [x[manip.q̇idx]; unactuated_acceleration(manip, x)]
-    )::Vector{<:DiffFloat}
+    unactuated = x -> (
+        [x[manip.q̇idx]; unactuated_acceleration(manip, x)]::Vector{<:DiffFloat}
+    )
 
     return ControlAffineFlow(manip, actuated, unactuated)
 end

@@ -25,4 +25,5 @@ init_mode = :flight
 rk4 = ExplicitIntegrator(:rk4)
 xs = roll_out(system, rk4, N, Δt, us, xic, init_mode)
 plot_2d_states(N, system.nx, (1,3), xs; title="Bouncing Quadrotor Roll-Out")
+
 nothing
