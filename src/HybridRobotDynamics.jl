@@ -2,8 +2,6 @@ module HybridRobotDynamics
 
 using LinearAlgebra
 using ForwardDiff
-using ModelingToolkit
-using Symbolics
 using Plots
 
 export
