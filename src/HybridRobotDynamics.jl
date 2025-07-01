@@ -19,6 +19,7 @@ export
         plot_2d_states,
         bouncing_ball,
         bouncing_quadrotor,
+        five_link_walker,
         hopper
 
 include("utils.jl")
