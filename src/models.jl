@@ -4,6 +4,7 @@
 Returns the hybrid system model containing the modes and transitions of a planar (in)elastic bouncing ball.
 """
 function bouncing_ball(
+    m::Real = 1.0,
     e::Real = 1.0,
     g::Real = 9.81
 )::HybridSystem
@@ -11,21 +12,31 @@ function bouncing_ball(
     # State space: x, y, xdot, ydot
     nx = 4
     nu = 1
-    flight_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> [x[3:4]; 0.0; u[1] - g]
+    qidx = 1:2
+    q̇idx = 3:4
 
-    # Define hybrid mode
+    # Manipulator equation form
+    B = q -> reshape([0.0, 1.0], 2, 1)::Matrix{<:DiffFloat}
+    M = q -> Matrix{Float64}(m * I(2))::Matrix{<:DiffFloat}
+    c = (q, q̇) -> m * [0.0, g]::Vector{<:DiffFloat}
+
+    # We can define a ControlAffineFlow like this:
+    #   manip = ManipulatorEquation(manip_args...)
+    #   flow = ControlAffineFlow(manip)
+    # Or like this:
+    #   flow = ControlAffineFlow(manip_args...)
+
+    # Flow and hybrid mode
+    flight_flow = ControlAffineFlow(qidx, q̇idx, B, M, c)
     flight_mode = HybridMode(flight_flow)
 
-    # Define impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[2]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:3]; -e*x[4]]::Vector{<:DiffFloat}
+    # Impact transition
+    g_impact = x -> x[2]::DiffFloat
+    R_impact = x -> [x[1]; 1e-9; x[3]; abs(e*x[4])]::Vector{<:DiffFloat}
     impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(flight_mode, flight_mode, impact)
 
-    # Create hybrid system dicts
+    # Hybrid system dicts
     transitions = Dict(:impact => impact)
     modes = Dict(:flight => flight_mode)
     return HybridSystem(nx, nu, transitions, modes)
@@ -58,29 +69,31 @@ function bouncing_quadrotor(
     ]
 
     # Smooth dynamics
-    function quadrotor_flow(
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
+    function actuated(x::Vector{<:DiffFloat})::Matrix{<:DiffFloat}
+        return [zeros(7,4); mass\K; J\B]
+    end
+    function unactuated(x::Vector{<:DiffFloat})::Vector{<:DiffFloat}
         q = x[4:7]
         v = x[8:10]
         ω = x[11:13]
         return [
             Qquat(q) * v;
             0.5 * Gquat(q) * ω;
-            Qquat(q)'*g + K*u/mass - cross(ω, v);
-            J \ (B*u - cross(ω, J*ω))
+            Qquat(q)'*g - cross(ω, v);
+            -J \ cross(ω, J*ω)
         ]
     end
 
-    # Hybrid modes
-    flight_mode = HybridMode(quadrotor_flow)
+    # Hybrid mode
+    flight_flow = ControlAffineFlow(actuated, unactuated)
+    flight_mode = HybridMode(flight_flow)
 
     # Impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[3]::DiffFloat
-    R_impact = x::Vector{<:DiffFloat} -> [
-        x[1:2]; 1e-3; x[4:9]; -e*x[10]; x[11:13]]::Vector{<:DiffFloat}
-    impact = Transition(quadrotor_flow, quadrotor_flow, g_impact, R_impact)
+    g_impact = x -> x[3]::DiffFloat
+    R_impact = x -> (
+        [x[1:2]; 1e-9; x[4:9]; abs(e*x[10]); x[11:13]]::Vector{<:DiffFloat}
+    )
+    impact = Transition(flight_flow, flight_flow, g_impact, R_impact)
     add_transition!(flight_mode, flight_mode, impact)
 
     # Create hybrid system
@@ -96,7 +109,6 @@ end
 function hopper(
     m1::Real = 5.0,    # body mass
     m2::Real = 1.0,    # foot mass
-    e::Real = 0.0,     # coefficient of restitution of foot
     g::Real = 9.81,    # acceleration due to gravity
     Llb::Real = 0.5,
     Lub::Real = 1.5
@@ -106,70 +118,52 @@ function hopper(
     #   body xdot, body ydot, foot xdot, foot ydot
     nx = 8
     nu = 2
+
     M = Diagonal([m1; m1; m2; m2])
 
-    function get_length_vector(
-        x::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
-        return x[1:2] - x[3:4]
+    # q or x can be inputted into these auxiliary functions
+    function get_length_vector(q::Vector{<:DiffFloat})::Vector{<:DiffFloat}
+        return q[1:2] - q[3:4]
     end
-
-    function get_unit_length(
-        x::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
-        L = get_length_vector(x)
+    function get_unit_length(q::Vector{<:DiffFloat})::Vector{<:DiffFloat}
+        L = get_length_vector(q)
         return L / norm(L)
     end
 
-    function B_flight(
-        x::Vector{<:DiffFloat}
-    )::Matrix{<:DiffFloat}
-        L1, L2 = get_unit_length(x)
+    # Manipulator equation form
+    function B_flight(q::Vector{<:DiffFloat})::Matrix{<:DiffFloat}
+        L1, L2 = get_unit_length(q)
         return [L1  L2; L2 -L1; -L1 -L2; -L2  L1]
     end
 
-    function B_stance(
-        x::Vector{<:DiffFloat}
-    )::Matrix{<:DiffFloat}
+    function B_stance(x::Vector{<:DiffFloat})::Matrix{<:DiffFloat}
         L1, L2 = get_unit_length(x)
         return [L1  L2; L2 -L1; zeros(2,2)]
     end
 
-    function flow(
-        control_allocation::Function,
-        gravity::Vector{<:Real},
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    )::Vector{<:DiffFloat}
-        B = control_allocation(x)
-        return [x[5:8]; gravity + M\(B*u)]
-    end
-
     # Define flight mode
     grav_flight = [0; -g; 0; -g]
-    flight_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> flow(B_flight, grav_flight, x, u)
+    flight_unactuated = x -> [x[5:8]; grav_flight]::Vector{<:DiffFloat}
+    flight_actuated = x -> [zeros(4,2); M\B_flight(x)]::Matrix{<:DiffFloat}
+    flight_flow = ControlAffineFlow(flight_actuated, flight_unactuated)
     flight_mode = HybridMode(flight_flow)
 
     # Define stance mode
     grav_stance =  [0; -g; 0; 0]
-    stance_flow = (
-        x::Vector{<:DiffFloat},
-        u::Vector{<:DiffFloat}
-    ) -> flow(B_stance, grav_stance, x, u)
+    stance_unactuated = x -> [x[5:8]; grav_stance]::Vector{<:DiffFloat}
+    stance_actuated = x -> [zeros(4,2); M\B_stance(x)]::Matrix{<:DiffFloat}
+    stance_flow = ControlAffineFlow(stance_actuated, stance_unactuated)
     stance_mode = HybridMode(stance_flow)
 
-    # Define impact transition
-    g_impact = x::Vector{<:DiffFloat} -> x[4]
-    R_impact = x::Vector{<:DiffFloat} -> [x[1:6]; e * x[7:8]]
+    # Impact transition
+    g_impact = x -> x[4]::DiffFloat
+    R_impact = x -> [x[1:3]; 1e-9; x[5:6]; zeros(2)]::Vector{<:DiffFloat}
     impact = Transition(flight_flow, stance_flow, g_impact, R_impact)
     add_transition!(flight_mode, stance_mode, impact)
 
     # Define liftoff transition
-    g_liftoff = x::Vector{<:DiffFloat} -> -x[4]
-    R_liftoff = x::Vector{<:DiffFloat} -> x
+    g_liftoff = x -> -x[4]::DiffFloat
+    R_liftoff = x -> x::Vector{<:DiffFloat}
     liftoff = Transition(stance_flow, flight_flow, g_liftoff, R_liftoff)
     add_transition!(stance_mode, flight_mode, liftoff)
 
@@ -184,11 +178,11 @@ function hopper(
     )
 
     # Define length inequality constraint functions
-    glb = x::Vector{<:DiffFloat} -> Llb - norm(get_length_vector(x))
-    gub = x::Vector{<:DiffFloat} -> -Lub + norm(get_length_vector(x))
-    g = x::Vector{<:DiffFloat} -> [glb(x); gub(x)]
-    g_stage = (x::Vector{<:DiffFloat}, u::Vector{<:DiffFloat}) -> g(x)
-    g_term = x::Vector{<:DiffFloat} -> g(x)
+    glb = x -> Llb - norm(get_length_vector(x))
+    gub = x -> -Lub + norm(get_length_vector(x))
+    glen = x -> [glb(x); gub(x)]
+    g_stage = (x, u) -> glen(x)::Vector{<:DiffFloat}
+    g_term = x -> glen(x)::Vector{<:DiffFloat}
 
     return HybridSystem(
         nx, nu, transitions, modes;

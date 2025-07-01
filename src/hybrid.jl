@@ -4,8 +4,8 @@
 Derives the saltation matrix function for a given hybrid transition.
 """
 struct SaltationMatrix
-    flow_I::Function
-    flow_J::Function
+    flow_I::Flow
+    flow_J::Flow
     guard::Function
     reset::Function
 end
@@ -15,18 +15,19 @@ end
 
 Computes the saltation matrix at the corresponding hybrid transition given a state and input.
 """
-function (saltation::SaltationMatrix)(
+function (salt::SaltationMatrix)(
     x::Vector{<:DiffFloat},
     u::Vector{<:DiffFloat}
 )::Matrix{<:DiffFloat}
-    xJ = saltation.reset(x)
-    g_grad = ForwardDiff.gradient(saltation.guard, x)
-    R_jac = ForwardDiff.jacobian(saltation.reset, x)
+    xJ = salt.reset(x)
+    g_grad = ForwardDiff.gradient(salt.guard, x)
+    R_jac = ForwardDiff.jacobian(salt.reset, x)
     return (
-        R_jac + (saltation.flow_J(xJ, u) - R_jac * saltation.flow_I(x, u))
-              * g_grad' / (g_grad' * saltation.flow_I(x,u))
+        R_jac + (salt.flow_J(xJ,u) - R_jac * salt.flow_I(x,u)) * g_grad'
+              / (g_grad' * salt.flow_I(x,u))
     )
 end
+
 
 """
     Transition(flow_I, flow_J, guard, reset)
@@ -34,14 +35,14 @@ end
 Contains all hybrid system objects pertaining to a hybrid transition. Automatically computes the corresponding saltation matrix expresison.
 """
 struct Transition
-    flow_I::Function
-    flow_J::Function
+    flow_I::Flow
+    flow_J::Flow
     guard::Function
     reset::Function
     saltation::SaltationMatrix
     function Transition(
-        flow_I::Function,
-        flow_J::Function,
+        flow_I::Flow,
+        flow_J::Flow,
         guard::Function,
         reset::Function,
     )::Transition
@@ -50,17 +51,18 @@ struct Transition
     end
 end
 
+
 """
     HybridMode(flow, transitions=Dict())
 
 Contains the flow and feasible transitions of the corresponding hybrid mode. Transitions and adjacent modes are stored as key-value pairs.
 """
 mutable struct HybridMode
-    flow::Function
+    flow::Flow
     transitions::Dict{Transition, HybridMode}
     function HybridMode(
-        flow::Function,
-        transitions::Dict{Transition, HybridMode} = Dict{Transition, HybridMode}(Dict())
+        flow::Flow,
+        transitions::Dict{Transition,HybridMode} = Dict{Transition,HybridMode}()
     )::HybridMode
         return new(flow, transitions)
     end
@@ -156,7 +158,6 @@ mutable struct HybridSystem
     end
 end
 
-
 """
     roll_out(system, integrator, N, Δt, us, x0, init_transition)
 
@@ -175,23 +176,21 @@ function roll_out(
     u_idx = [(1:system.nu) .+ (k-1)*system.nu for k = 1:N-1]
     xs = [zeros(system.nx) for k = 1:N]
     xs[1] = x0
-    mode_I = system.modes[init_mode]
+    mI = system.modes[init_mode]
 
     # Roll out over time horizon
     for k = 1:N-1
-        xk = xs[k]
+        # Integrate smooth dynamics
+        xs[k+1] = integrator(mI.flow, xs[k], us[u_idx[k]], Δt)
 
         # Reset and update mode if guard is hit
-        for (trans, mode_J) in mode_I.transitions
-            if trans.guard(xk) <= 0.0
-                xk = trans.reset(xk)
-                mode_I = mode_J
+        for (trans, mJ) in mI.transitions
+            if trans.guard(xs[k+1]) <= 0.0
+                xs[k+1] = trans.reset(xs[k+1])
+                mI = mJ
                 break
             end
         end
-
-        # Integrate smooth dynamics
-        xs[k+1] = integrator(mode_I.flow, xk, us[u_idx[k]], Δt)
     end
     return vcat(xs...)
 end
